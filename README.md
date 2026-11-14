@@ -1,1 +1,1 @@
-# swift-umdac
+# UMDAC Datathon 2026 - Swift
