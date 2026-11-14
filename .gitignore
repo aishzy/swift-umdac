@@ -1,0 +1,39 @@
+# ---------------------------------------------------------------------------
+# UMDAC Datathon 2026 / Swift
+# ---------------------------------------------------------------------------
+
+# Official source data: 4.95 GB, never commit
+swift_umdac_datathon_2026_fictitious_payment_data.csv
+*.csv.gz
+
+# Local row-level outputs and scratch space (see data_local/manifest_local.json)
+data_local/
+
+# Private analysis notes: do not publish during the competition
+cs_findings.md
+
+# DuckDB / temporary files
+*.duckdb
+*.duckdb.wal
+*.tmp
+*.temp
+duckdb_tmp/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# Python (scripts are SQL/Node only, but keep the repo clean)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Node
+node_modules/
+npm-debug.log*

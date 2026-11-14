@@ -1,0 +1,33 @@
+check_name,value,expected,status
+row_count,10000000,10000000,PASS
+min_epoch_seconds,1682853746,1682853746,PASS
+max_epoch_seconds,1690797361,1690797361,PASS
+first_payment_recovered,3,>= 1,PASS
+null_epoch_rows,0,0,PASS
+null_amount_rows,0,0,PASS
+nonpositive_amount_rows,0,0,PASS
+max_usd_amount,15664132213.09,15664132213.09,PASS
+participants_below_2,0,0,PASS
+fx_count_above_participants_minus_1,0,0,PASS
+bad_ordering_bic_length,0,0,PASS
+bad_beneficiary_bic_length,0,0,PASS
+bad_currency_length,0,0,PASS
+invalid_continuity_flag,0,0,PASS
+invalid_transaction_type,0,0,PASS
+invalid_party_type,0,0,PASS
+invalid_anomaly_type,0,0,PASS
+distinct_currencies,155,155,PASS
+distinct_ordering_countries,228,228,PASS
+distinct_beneficiary_countries,229,229,PASS
+accounts_with_multiple_bics,0,0,PASS
+accounts_with_multiple_types,0,0,PASS
+anomaly_count,7006,7006,PASS
+distinct_anomaly_types,6,6,PASS
+iban_ordering_country_or_bank_mismatch,0,0,PASS
+iban_beneficiary_country_or_bank_mismatch,0,0,PASS
+path_with_ellipsis_at_endpoint,0,0,PASS
+path_gap_formula_max_deviation_pp,0.0949,< 0.2,PASS
+endpoint_start_match_pct,95.016,94.5-95.5,PASS
+endpoint_end_match_pct,95.0074,94.5-95.5,PASS
+local_currency_share_pct,89.4479,89.0-90.0,PASS
+sample_fraction_pct,4.9864,4.5-5.5,PASS

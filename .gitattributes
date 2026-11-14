@@ -1,0 +1,20 @@
+# Normalise text files to LF in the repository
+*.md    text eol=lf
+*.sql   text eol=lf
+*.mjs   text eol=lf
+*.js    text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.txt   text eol=lf
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+
+# Generated aggregate tables: small, but noisy in diffs
+data/aggregates/*.csv linguist-generated=true
+
+# Binary / already-compressed files
+*.pdf      binary
+*.parquet  binary
+*.gz       binary
+*.zip      binary
