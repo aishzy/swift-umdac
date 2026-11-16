@@ -21,10 +21,10 @@ with the **full-data aggregate outputs** and a QA report.
 ```
 .
 ├── data/
-│   ├── aggregates/            # 21 public CSV tables (19 aggregates + 2 QA)
+│   ├── aggregates/            # 25 public CSV tables (23 aggregates + 2 QA)
 │   ├── manifest.json          # sizes, SHA-256, row counts
 │   ├── README.md              # aggregate catalogue and provenance
-│   └── QA.md                  # 32 integrity checks + sample comparison
+│   └── QA.md                  # 34 integrity checks + sample comparison
 ├── scripts/
 │   ├── prepare_data.sql       # parse → clean → sample → aggregate
 │   ├── verify_data.sql        # integrity and representativeness checks
@@ -63,7 +63,7 @@ full_rows 10,000,000 | sample_rows 498,645 | accounts 391,132
 sampled_accounts 19,670 | anomalies 7,006
 ```
 
-Expected QA result: **32 / 32 checks PASS**.
+Expected QA result: **34 / 34 checks PASS**.
 
 ---
 
@@ -71,10 +71,12 @@ Expected QA result: **32 / 32 checks PASS**.
 
 ### Public bundle (`data/`)
 
-- **19 aggregate tables** computed from all 10M rows: amount distributions,
-  currency mix, routing, path continuity, FX, duration, time-of-day/day,
-  bank and intermediary concentration, account activity, and anomaly breakdowns.
-- **`qa_checks.csv`** — 32 exact/range checks.
+- **23 aggregate tables** computed from all 10M rows: amount distributions,
+  currency mix, routing (including by amount decile), path continuity, FX,
+  duration, time-of-day/day (UTC and local clock), bank and intermediary
+  concentration, account activity, sender Pareto curve, and anomaly breakdowns
+  (by type, country and corridor).
+- **`qa_checks.csv`** — 34 exact/range checks.
 - **`qa_sample_vs_full.csv`** — 27 metrics comparing the local 5% sample with the
   full data.
 - **`manifest.json`** — file sizes, SHA-256 hashes and row counts.
@@ -91,6 +93,7 @@ See [`data/README.md`](data/README.md) for every file and column, and
 | `swift_umdac_2026_clean_sample_5pct.parquet` | 498,645 | Typed sample with derived columns |
 | `swift_umdac_2026_anomalies.csv.gz` | 7,006 | All rows with a non-blank anomaly label |
 | `preview_100.csv` | 100 | Small mixed preview |
+| `country_tz.csv` | 228 | ISO2 → IANA timezone map used by the local-hour aggregate |
 
 The sample selects **5% of ordering accounts within each ordering country** and
 keeps all payments per selected account: 19,670 accounts, 498,645 rows (4.9864%),
@@ -147,7 +150,7 @@ substitutions are intentional generator behaviour and are preserved.
 
 ## Data quality
 
-- **32 / 32 integrity checks pass**, including row count, epoch bounds, BIC and
+- **34 / 34 integrity checks pass**, including row count, epoch bounds, BIC and
   currency lengths, IBAN country/bank consistency, FX bounds, path continuity and
   anomaly vocabulary.
 - **Sample representativeness:** routing mix, path-gap rates, endpoint match

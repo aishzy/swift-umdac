@@ -3,7 +3,7 @@
   "bundle": "public aggregates and code",
   "description": "Full-data aggregate tables and QA outputs. Contains no row-level payment records.",
   "row_level": false,
-  "generated_at": "2026-11-14T16:39:38.774Z",
+  "generated_at": "2026-11-16T07:45:20.633Z",
   "source": {
     "file": "swift_umdac_datathon_2026_fictitious_payment_data.csv",
     "rows": 10000000,
@@ -38,20 +38,20 @@
     "node": "v26.13.1"
   },
   "totals": {
-    "files": 23,
-    "bytes": 896772
+    "files": 27,
+    "bytes": 1395057
   },
   "files": [
     {
       "path": "data/QA.md",
-      "bytes": 6277,
-      "sha256": "4548e2051493c40c191f96307b11a294c317df07353a82b59ac5c6a669fde04e",
+      "bytes": 6613,
+      "sha256": "db8585a4fd7582fff4b399d6e899fc3706a7d305bd771966c93681bdf96a47ac",
       "rows": null
     },
     {
       "path": "data/README.md",
-      "bytes": 6683,
-      "sha256": "b2cabeabd2029af49f04b20f3746af10f67d2b457dba31b8301e348bf80a02d8",
+      "bytes": 7933,
+      "sha256": "c624cc24945ff1779d18b3b3b5983807b720da3c105a1513217ac47d09261227",
       "rows": null
     },
     {
@@ -79,9 +79,15 @@
       "rows": 4
     },
     {
+      "path": "data/aggregates/agg_anomaly_corridor.csv",
+      "bytes": 490261,
+      "sha256": "d0ae62ad2cae0d3820ae4feb1dff99c625bc267714cb3d903480a37f57c5ede2",
+      "rows": 26764
+    },
+    {
       "path": "data/aggregates/agg_anomaly_country.csv",
       "bytes": 7105,
-      "sha256": "0072140a4e5ce7faf966c1b333afca4f2a5d5b7f63471767a22de14a51e5e9e4",
+      "sha256": "1d6a2fad7bb06cc509aee21fa6ff961cfa6aa52ae12bd1d4280ceb5b46cf9c4e",
       "rows": 229
     },
     {
@@ -99,19 +105,19 @@
     {
       "path": "data/aggregates/agg_bank_country.csv",
       "bytes": 3830,
-      "sha256": "f8676f215317090776274ab783e1a47f30277a383b76f43d77c81fc69bffe747",
+      "sha256": "0fdb389bfca937c4b61b7ed3819bad7e38faa2806dea163a1cb280fa19643d1f",
       "rows": 229
     },
     {
       "path": "data/aggregates/agg_currency_country.csv",
       "bytes": 252816,
-      "sha256": "956a3a57879ebb0328341e74f1f9562654853548dc13a6ae65c7224f97fe1c03",
+      "sha256": "39ca64edb6d1fffea1924e629c8f826283bf269f6dcb91d9ff953799dd222c0f",
       "rows": 13804
     },
     {
       "path": "data/aggregates/agg_currency_foreign_mix.csv",
       "bytes": 2369,
-      "sha256": "ae644dea22a1d4d9b1d2be8bb3db1b0a3e0b03a8edd3a84d0baac1f30c5c1f2f",
+      "sha256": "937ea024d0a095df7a90ef77d01582473b9ba4b9ea19624ecc071183d06d4f0c",
       "rows": 155
     },
     {
@@ -157,6 +163,18 @@
       "rows": 32
     },
     {
+      "path": "data/aggregates/agg_routing_by_amount_decile.csv",
+      "bytes": 1952,
+      "sha256": "52557907f9a8cad498be1e64d3bd347fc9bb9c81ba522c34f603f7f4a09bbfc2",
+      "rows": 30
+    },
+    {
+      "path": "data/aggregates/agg_sender_pareto.csv",
+      "bytes": 3414,
+      "sha256": "77080865738c8cb0f61aabd6290804ae1f5ce5f25c19e178120d46e115a8f3c0",
+      "rows": 100
+    },
+    {
       "path": "data/aggregates/agg_time_daily.csv",
       "bytes": 4502,
       "sha256": "c3abf11f3c8dfdda1635e3a3588644e57d0aac169d97d73f251aee18b62f2c98",
@@ -169,10 +187,16 @@
       "rows": 5308
     },
     {
+      "path": "data/aggregates/agg_time_hour_local.csv",
+      "bytes": 994,
+      "sha256": "146e8a2050ec7f12e1c2db0126a992d8df6df299620bcfb9e5f2443dfd597254",
+      "rows": 24
+    },
+    {
       "path": "data/aggregates/qa_checks.csv",
-      "bytes": 1250,
-      "sha256": "794a26107761625e00e8c1b36ba1ffba907464070148a7dc3e9eb7d4f8d62d97",
-      "rows": 32
+      "bytes": 1328,
+      "sha256": "842c4485ad815767ee2353149822ee358b20e42bbff97123eb982477fcb022b2",
+      "rows": 34
     },
     {
       "path": "data/aggregates/qa_sample_vs_full.csv",

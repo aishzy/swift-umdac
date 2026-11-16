@@ -5,7 +5,7 @@ Reproducible DuckDB pipeline for the UMDAC Datathon 2026 / Swift payment dataset
 | Script | Purpose |
 |---|---|
 | [`prepare_data.sql`](prepare_data.sql) | Parse and clean the source CSV, write the full Parquet, the 5% account sample, anomaly extract, preview and all public aggregates |
-| [`verify_data.sql`](verify_data.sql) | Run 32 integrity checks and compare the sample with the full data; writes `qa_checks.csv` and `qa_sample_vs_full.csv` |
+| [`verify_data.sql`](verify_data.sql) | Run 34 integrity checks and compare the sample with the full data; writes `qa_checks.csv` and `qa_sample_vs_full.csv` |
 | [`make_manifest.mjs`](make_manifest.mjs) | Write SHA-256 / size / row-count manifests for the public and local bundles |
 
 ---
@@ -41,8 +41,8 @@ node scripts/make_manifest.mjs
 
 | Path | Contents |
 |---|---|
-| `data/aggregates/*.csv` | 19 full-data aggregate tables |
-| `data/aggregates/qa_checks.csv` | 32 integrity checks |
+| `data/aggregates/*.csv` | 23 full-data aggregate tables |
+| `data/aggregates/qa_checks.csv` | 34 integrity checks |
 | `data/aggregates/qa_sample_vs_full.csv` | 27 sample-vs-full metrics |
 | `data/manifest.json` | Sizes, SHA-256 and row counts for every public file |
 
@@ -58,7 +58,8 @@ See [`../data/README.md`](../data/README.md) for the column-level catalogue and
 | `data_local/swift_umdac_2026_clean_sample_5pct.parquet` | 498,645 | 54 MB | Typed sample with derived columns |
 | `data_local/swift_umdac_2026_anomalies.csv.gz` | 7,006 | 0.8 MB | Every row with a non-blank `ANOMALY_TYPE` |
 | `data_local/preview_100.csv` | 100 | 49 KB | Small mixed preview |
-| `data_local/manifest_local.json` | — | — | Sizes, SHA-256 and row counts for the five files above |
+| `data_local/country_tz.csv` | 228 | 4 KB | ISO2 → IANA timezone map used by the local-hour aggregate |
+| `data_local/manifest_local.json` | — | — | Sizes, SHA-256 and row counts for the six files above |
 
 The row-level bundle is **not** for publication during the competition. See
 [`../README.md`](../README.md) for the competition notice.
@@ -103,6 +104,16 @@ the first payment or fail on the embedded newlines in `ORDERING_DETAILS`.
 `local_ccy` is derived once as the per-country modal currency and joined back.
 Modal currency, not a hard-coded ISO table, keeps the pipeline self-contained.
 
+### Local-hour timezone map
+
+`agg_time_hour_local.csv` needs a country clock. The pipeline embeds a hard-coded
+ISO 3166-1 alpha-2 → IANA map (`country_tz`, 228 entries) using each country's
+capital / main financial centre; it is also written to `data_local/country_tz.csv`
+so `verify_data.sql` can check coverage. Timestamps are cast through UTC first
+(`(EVENT_TS_UTC AT TIME ZONE 'UTC') AT TIME ZONE <tz>`) so the DuckDB ICU extension
+applies DST correctly, and `SET TimeZone = 'UTC'` pins the session zone so results
+do not depend on the host locale.
+
 ### Sampling
 
 - Unit: **ordering account** (`ORDERING_ACCOUNT`, non-empty only).
@@ -140,8 +151,10 @@ Observed gap rates for 2–6 participants match `1 − 0.95^(participants−1)` 
   the sort-heavy window functions within memory. Lower `threads` on a small
   machine; raise it on a large one.
 - **Row order in outputs.** The sample CSV and Parquet are ordered by
-  `EPOCH_SECONDS, ORDERING_ACCOUNT`; aggregates are explicitly ordered. Hash-based
-  selection is deterministic for a given DuckDB build, so reruns are reproducible.
+  `EPOCH_SECONDS, ORDERING_ACCOUNT`; every aggregate `ORDER BY` ends in a unique
+  key (country, currency, party pair, …) so tied sort values cannot reorder between
+  runs. Hash-based selection is deterministic for a given DuckDB build, so reruns
+  are byte-reproducible.
 - **Regenerating manifests.** `make_manifest.mjs` reads row counts with DuckDB, so
   it must run *after* `prepare_data.sql` and `verify_data.sql`. Set `DUCKDB_BIN` if
   `duckdb` is not on `PATH`.

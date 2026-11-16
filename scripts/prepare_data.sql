@@ -13,6 +13,7 @@
 --   data_local/swift_umdac_2026_clean_sample_5pct.csv.gz
 --   data_local/swift_umdac_2026_anomalies.csv.gz
 --   data_local/preview_100.csv
+--   data_local/country_tz.csv
 --   data/aggregates/*.csv
 --
 -- Notes
@@ -29,6 +30,9 @@
 SET threads = 8;
 SET preserve_insertion_order = false;
 SET temp_directory = 'data_local/duckdb_tmp';
+-- Pin the session zone so every run behaves identically regardless of host locale.
+-- All source timestamps are naive UTC; local-hour work casts through UTC explicitly.
+SET TimeZone = 'UTC';
 
 -- ----------------------------------------------------------------------------
 -- 1. Raw view
@@ -283,7 +287,7 @@ COPY (
         round(max(USD_AMOUNT::DOUBLE), 2)         AS max_usd
     FROM payments
     GROUP BY 1
-    ORDER BY median_usd DESC NULLS LAST
+    ORDER BY median_usd DESC NULLS LAST, ordering_country
 )
 TO 'data/aggregates/agg_amount_country.csv' (FORMAT CSV, HEADER);
 
@@ -296,7 +300,7 @@ COPY (
         round(count(*) * 100.0 / sum(count(*)) OVER (PARTITION BY ORDERING_COUNTRY), 4) AS share_pct
     FROM payments
     GROUP BY 1, 2
-    ORDER BY 1, n_payments DESC
+    ORDER BY 1, n_payments DESC, currency_code
 )
 TO 'data/aggregates/agg_currency_country.csv' (FORMAT CSV, HEADER);
 
@@ -308,7 +312,7 @@ COPY (
     FROM payments
     WHERE NOT IS_LOCAL_CURRENCY
     GROUP BY 1
-    ORDER BY n_payments DESC
+    ORDER BY n_payments DESC, currency_code
 )
 TO 'data/aggregates/agg_currency_foreign_mix.csv' (FORMAT CSV, HEADER);
 
@@ -452,7 +456,7 @@ COPY (
         b.median_usd
     FROM by_type b
     CROSS JOIN totals t
-    ORDER BY b.n_payments DESC
+    ORDER BY b.n_payments DESC, b.anomaly_type
 )
 TO 'data/aggregates/agg_anomaly_type.csv' (FORMAT CSV, HEADER);
 
@@ -492,7 +496,7 @@ COPY (
     LEFT JOIN ranked r
       ON b.beneficiary_country = r.beneficiary_country
      AND r.rn = 1
-    ORDER BY anomaly_rate_pct DESC NULLS LAST
+    ORDER BY anomaly_rate_pct DESC NULLS LAST, beneficiary_country
 )
 TO 'data/aggregates/agg_anomaly_country.csv' (FORMAT CSV, HEADER);
 
@@ -534,7 +538,7 @@ COPY (
     WHERE bic <> '...'
       AND length(bic) = 8
     GROUP BY 1
-    ORDER BY n_bics DESC
+    ORDER BY n_bics DESC, country
 )
 TO 'data/aggregates/agg_bank_country.csv' (FORMAT CSV, HEADER);
 
@@ -586,6 +590,400 @@ COPY (
     ORDER BY 1, 2
 )
 TO 'data/aggregates/agg_account_activity.csv' (FORMAT CSV, HEADER);
+
+-- --- Dashboard-ready additions ------------------------------------------------
+-- Four extra aggregates: routing across amount deciles, the local-clock hour
+-- profile, anomaly rates per country corridor, and the sender Pareto curve.
+
+-- Amount deciles: ten equal-count buckets ordered by USD amount. Comparing the
+-- routing mix across deciles tests whether transaction type depends on size.
+COPY (
+    WITH deciled AS (
+        SELECT
+            TRANSACTION_TYPE_CODE                 AS transaction_type,
+            USD_AMOUNT,
+            ntile(10) OVER (
+                ORDER BY USD_AMOUNT, ORDERING_ACCOUNT, BENEFICIARY_ACCOUNT, EPOCH_SECONDS
+            )                                     AS amount_decile
+        FROM payments
+    ),
+    ranged AS (
+        SELECT
+            amount_decile,
+            transaction_type,
+            USD_AMOUNT,
+            min(USD_AMOUNT::DOUBLE) OVER (PARTITION BY amount_decile) AS decile_min_usd,
+            max(USD_AMOUNT::DOUBLE) OVER (PARTITION BY amount_decile) AS decile_max_usd
+        FROM deciled
+    )
+    SELECT
+        amount_decile,
+        round(max(decile_min_usd), 2)             AS decile_min_usd,
+        round(max(decile_max_usd), 2)             AS decile_max_usd,
+        transaction_type,
+        count(*)                                  AS n_payments,
+        round(count(*) * 100.0 / sum(count(*)) OVER (PARTITION BY amount_decile), 4) AS share_pct,
+        round(median(USD_AMOUNT::DOUBLE), 2)      AS median_usd,
+        round(sum(USD_AMOUNT::DOUBLE), 2)         AS total_usd
+    FROM ranged
+    GROUP BY 1, 4
+    ORDER BY 1, 4
+)
+TO 'data/aggregates/agg_routing_by_amount_decile.csv' (FORMAT CSV, HEADER);
+
+-- Country -> primary IANA timezone (capital / main financial centre). Multi-zone
+-- countries are approximated by their primary zone; used only to bucket payments
+-- into a local clock hour, so DST is handled correctly via the ICU extension.
+CREATE OR REPLACE TABLE country_tz (country VARCHAR, tz VARCHAR);
+INSERT INTO country_tz VALUES
+    ('AD', 'Europe/Andorra'),
+    ('AE', 'Asia/Dubai'),
+    ('AF', 'Asia/Kabul'),
+    ('AG', 'America/Antigua'),
+    ('AI', 'America/Anguilla'),
+    ('AL', 'Europe/Tirane'),
+    ('AM', 'Asia/Yerevan'),
+    ('AO', 'Africa/Luanda'),
+    ('AR', 'America/Argentina/Buenos_Aires'),
+    ('AT', 'Europe/Vienna'),
+    ('AU', 'Australia/Sydney'),
+    ('AW', 'America/Aruba'),
+    ('AZ', 'Asia/Baku'),
+    ('BA', 'Europe/Sarajevo'),
+    ('BB', 'America/Barbados'),
+    ('BD', 'Asia/Dhaka'),
+    ('BE', 'Europe/Brussels'),
+    ('BF', 'Africa/Ouagadougou'),
+    ('BG', 'Europe/Sofia'),
+    ('BH', 'Asia/Bahrain'),
+    ('BI', 'Africa/Bujumbura'),
+    ('BJ', 'Africa/Porto-Novo'),
+    ('BM', 'Atlantic/Bermuda'),
+    ('BN', 'Asia/Brunei'),
+    ('BO', 'America/La_Paz'),
+    ('BQ', 'America/Kralendijk'),
+    ('BR', 'America/Sao_Paulo'),
+    ('BS', 'America/Nassau'),
+    ('BT', 'Asia/Thimphu'),
+    ('BW', 'Africa/Gaborone'),
+    ('BY', 'Europe/Minsk'),
+    ('BZ', 'America/Belize'),
+    ('CA', 'America/Toronto'),
+    ('CD', 'Africa/Kinshasa'),
+    ('CF', 'Africa/Bangui'),
+    ('CG', 'Africa/Brazzaville'),
+    ('CH', 'Europe/Zurich'),
+    ('CI', 'Africa/Abidjan'),
+    ('CK', 'Pacific/Rarotonga'),
+    ('CL', 'America/Santiago'),
+    ('CM', 'Africa/Douala'),
+    ('CN', 'Asia/Shanghai'),
+    ('CO', 'America/Bogota'),
+    ('CR', 'America/Costa_Rica'),
+    ('CU', 'America/Havana'),
+    ('CV', 'Atlantic/Cape_Verde'),
+    ('CW', 'America/Curacao'),
+    ('CY', 'Asia/Nicosia'),
+    ('CZ', 'Europe/Prague'),
+    ('DE', 'Europe/Berlin'),
+    ('DJ', 'Africa/Djibouti'),
+    ('DK', 'Europe/Copenhagen'),
+    ('DM', 'America/Dominica'),
+    ('DO', 'America/Santo_Domingo'),
+    ('DZ', 'Africa/Algiers'),
+    ('EC', 'America/Guayaquil'),
+    ('EE', 'Europe/Tallinn'),
+    ('EG', 'Africa/Cairo'),
+    ('ES', 'Europe/Madrid'),
+    ('ET', 'Africa/Addis_Ababa'),
+    ('FI', 'Europe/Helsinki'),
+    ('FJ', 'Pacific/Fiji'),
+    ('FM', 'Pacific/Pohnpei'),
+    ('FO', 'Atlantic/Faroe'),
+    ('FR', 'Europe/Paris'),
+    ('GA', 'Africa/Libreville'),
+    ('GB', 'Europe/London'),
+    ('GD', 'America/Grenada'),
+    ('GE', 'Asia/Tbilisi'),
+    ('GF', 'America/Cayenne'),
+    ('GG', 'Europe/Guernsey'),
+    ('GH', 'Africa/Accra'),
+    ('GI', 'Europe/Gibraltar'),
+    ('GL', 'America/Nuuk'),
+    ('GM', 'Africa/Banjul'),
+    ('GN', 'Africa/Conakry'),
+    ('GP', 'America/Guadeloupe'),
+    ('GQ', 'Africa/Malabo'),
+    ('GR', 'Europe/Athens'),
+    ('GT', 'America/Guatemala'),
+    ('GU', 'Pacific/Guam'),
+    ('GW', 'Africa/Bissau'),
+    ('GY', 'America/Guyana'),
+    ('HK', 'Asia/Hong_Kong'),
+    ('HN', 'America/Tegucigalpa'),
+    ('HR', 'Europe/Zagreb'),
+    ('HT', 'America/Port-au-Prince'),
+    ('HU', 'Europe/Budapest'),
+    ('ID', 'Asia/Jakarta'),
+    ('IE', 'Europe/Dublin'),
+    ('IL', 'Asia/Jerusalem'),
+    ('IM', 'Europe/Isle_of_Man'),
+    ('IN', 'Asia/Kolkata'),
+    ('IQ', 'Asia/Baghdad'),
+    ('IR', 'Asia/Tehran'),
+    ('IS', 'Atlantic/Reykjavik'),
+    ('IT', 'Europe/Rome'),
+    ('JE', 'Europe/Jersey'),
+    ('JM', 'America/Jamaica'),
+    ('JO', 'Asia/Amman'),
+    ('JP', 'Asia/Tokyo'),
+    ('KE', 'Africa/Nairobi'),
+    ('KG', 'Asia/Bishkek'),
+    ('KH', 'Asia/Phnom_Penh'),
+    ('KI', 'Pacific/Tarawa'),
+    ('KM', 'Indian/Comoro'),
+    ('KN', 'America/St_Kitts'),
+    ('KP', 'Asia/Pyongyang'),
+    ('KR', 'Asia/Seoul'),
+    ('KW', 'Asia/Kuwait'),
+    ('KY', 'America/Cayman'),
+    ('KZ', 'Asia/Almaty'),
+    ('LA', 'Asia/Vientiane'),
+    ('LB', 'Asia/Beirut'),
+    ('LC', 'America/St_Lucia'),
+    ('LI', 'Europe/Vaduz'),
+    ('LK', 'Asia/Colombo'),
+    ('LR', 'Africa/Monrovia'),
+    ('LS', 'Africa/Maseru'),
+    ('LT', 'Europe/Vilnius'),
+    ('LU', 'Europe/Luxembourg'),
+    ('LV', 'Europe/Riga'),
+    ('LY', 'Africa/Tripoli'),
+    ('MA', 'Africa/Casablanca'),
+    ('MC', 'Europe/Monaco'),
+    ('MD', 'Europe/Chisinau'),
+    ('ME', 'Europe/Podgorica'),
+    ('MG', 'Indian/Antananarivo'),
+    ('MH', 'Pacific/Majuro'),
+    ('MK', 'Europe/Skopje'),
+    ('ML', 'Africa/Bamako'),
+    ('MM', 'Asia/Yangon'),
+    ('MN', 'Asia/Ulaanbaatar'),
+    ('MO', 'Asia/Macau'),
+    ('MP', 'Pacific/Saipan'),
+    ('MQ', 'America/Martinique'),
+    ('MR', 'Africa/Nouakchott'),
+    ('MS', 'America/Montserrat'),
+    ('MT', 'Europe/Malta'),
+    ('MU', 'Indian/Mauritius'),
+    ('MV', 'Indian/Maldives'),
+    ('MW', 'Africa/Blantyre'),
+    ('MX', 'America/Mexico_City'),
+    ('MY', 'Asia/Kuala_Lumpur'),
+    ('MZ', 'Africa/Maputo'),
+    ('NA', 'Africa/Windhoek'),
+    ('NC', 'Pacific/Noumea'),
+    ('NE', 'Africa/Niamey'),
+    ('NG', 'Africa/Lagos'),
+    ('NI', 'America/Managua'),
+    ('NL', 'Europe/Amsterdam'),
+    ('NO', 'Europe/Oslo'),
+    ('NP', 'Asia/Kathmandu'),
+    ('NR', 'Pacific/Nauru'),
+    ('NZ', 'Pacific/Auckland'),
+    ('OM', 'Asia/Muscat'),
+    ('PA', 'America/Panama'),
+    ('PE', 'America/Lima'),
+    ('PF', 'Pacific/Tahiti'),
+    ('PG', 'Pacific/Port_Moresby'),
+    ('PH', 'Asia/Manila'),
+    ('PK', 'Asia/Karachi'),
+    ('PL', 'Europe/Warsaw'),
+    ('PM', 'America/Miquelon'),
+    ('PR', 'America/Puerto_Rico'),
+    ('PS', 'Asia/Gaza'),
+    ('PT', 'Europe/Lisbon'),
+    ('PW', 'Pacific/Palau'),
+    ('PY', 'America/Asuncion'),
+    ('QA', 'Asia/Qatar'),
+    ('RE', 'Indian/Reunion'),
+    ('RO', 'Europe/Bucharest'),
+    ('RS', 'Europe/Belgrade'),
+    ('RU', 'Europe/Moscow'),
+    ('RW', 'Africa/Kigali'),
+    ('SA', 'Asia/Riyadh'),
+    ('SB', 'Pacific/Guadalcanal'),
+    ('SC', 'Indian/Mahe'),
+    ('SD', 'Africa/Khartoum'),
+    ('SE', 'Europe/Stockholm'),
+    ('SG', 'Asia/Singapore'),
+    ('SH', 'Atlantic/St_Helena'),
+    ('SI', 'Europe/Ljubljana'),
+    ('SK', 'Europe/Bratislava'),
+    ('SL', 'Africa/Freetown'),
+    ('SM', 'Europe/San_Marino'),
+    ('SN', 'Africa/Dakar'),
+    ('SO', 'Africa/Mogadishu'),
+    ('SR', 'America/Paramaribo'),
+    ('SS', 'Africa/Juba'),
+    ('ST', 'Africa/Sao_Tome'),
+    ('SV', 'America/El_Salvador'),
+    ('SX', 'America/Lower_Princes'),
+    ('SY', 'Asia/Damascus'),
+    ('SZ', 'Africa/Mbabane'),
+    ('TC', 'America/Grand_Turk'),
+    ('TD', 'Africa/Ndjamena'),
+    ('TG', 'Africa/Lome'),
+    ('TH', 'Asia/Bangkok'),
+    ('TJ', 'Asia/Dushanbe'),
+    ('TL', 'Asia/Dili'),
+    ('TM', 'Asia/Ashgabat'),
+    ('TN', 'Africa/Tunis'),
+    ('TO', 'Pacific/Tongatapu'),
+    ('TR', 'Europe/Istanbul'),
+    ('TT', 'America/Port_of_Spain'),
+    ('TV', 'Pacific/Funafuti'),
+    ('TW', 'Asia/Taipei'),
+    ('TZ', 'Africa/Dar_es_Salaam'),
+    ('UA', 'Europe/Kyiv'),
+    ('UG', 'Africa/Kampala'),
+    ('US', 'America/New_York'),
+    ('UY', 'America/Montevideo'),
+    ('UZ', 'Asia/Tashkent'),
+    ('VA', 'Europe/Vatican'),
+    ('VC', 'America/St_Vincent'),
+    ('VE', 'America/Caracas'),
+    ('VG', 'America/Tortola'),
+    ('VI', 'America/St_Thomas'),
+    ('VN', 'Asia/Ho_Chi_Minh'),
+    ('VU', 'Pacific/Efate'),
+    ('WF', 'Pacific/Wallis'),
+    ('WS', 'Pacific/Apia'),
+    ('XK', 'Europe/Belgrade'),
+    ('YE', 'Asia/Aden'),
+    ('ZA', 'Africa/Johannesburg'),
+    ('ZM', 'Africa/Lusaka'),
+    ('ZW', 'Africa/Harare');
+
+COPY country_tz TO 'data_local/country_tz.csv' (FORMAT CSV, HEADER);
+
+-- Local-clock hour profile: every payment is placed on the ordering country's
+-- local clock. Complements agg_time_hour.csv (ordering country x UTC hour).
+COPY (
+    WITH localised AS (
+        SELECT
+            hour(
+                (EVENT_TS_UTC AT TIME ZONE 'UTC') AT TIME ZONE COALESCE(tz.tz, 'UTC')
+            )                                     AS local_hour,
+            USD_AMOUNT
+        FROM payments p
+        LEFT JOIN country_tz tz
+          ON p.ORDERING_COUNTRY = tz.country
+    )
+    SELECT
+        local_hour,
+        count(*)                                  AS n_payments,
+        round(count(*) * 100.0 / sum(count(*)) OVER (), 4) AS share_pct,
+        round(median(USD_AMOUNT::DOUBLE), 2)      AS median_usd,
+        round(sum(USD_AMOUNT::DOUBLE), 2)         AS total_usd
+    FROM localised
+    GROUP BY 1
+    ORDER BY 1
+)
+TO 'data/aggregates/agg_time_hour_local.csv' (FORMAT CSV, HEADER);
+
+-- Anomaly rate per ordering x beneficiary country corridor, with the dominant
+-- anomaly type. Filter on n_payments before ranking: low-volume corridors are
+-- noisy by construction.
+COPY (
+    WITH base AS (
+        SELECT
+            ORDERING_COUNTRY                      AS ordering_country,
+            BENEFICIARY_COUNTRY                   AS beneficiary_country,
+            count(*)                              AS n_payments,
+            count(*) FILTER (WHERE ANOMALY_TYPE IS NOT NULL) AS n_anomalies
+        FROM payments
+        GROUP BY 1, 2
+    ),
+    types AS (
+        SELECT
+            ORDERING_COUNTRY                      AS ordering_country,
+            BENEFICIARY_COUNTRY                   AS beneficiary_country,
+            ANOMALY_TYPE                          AS anomaly_type,
+            count(*)                              AS n
+        FROM payments
+        WHERE ANOMALY_TYPE IS NOT NULL
+        GROUP BY 1, 2, 3
+    ),
+    ranked AS (
+        SELECT *, row_number() OVER (
+            PARTITION BY ordering_country, beneficiary_country
+            ORDER BY n DESC, anomaly_type
+        ) AS rn
+        FROM types
+    )
+    SELECT
+        b.ordering_country,
+        b.beneficiary_country,
+        b.n_payments,
+        b.n_anomalies,
+        round(b.n_anomalies * 100.0 / b.n_payments, 4) AS anomaly_rate_pct,
+        r.anomaly_type                               AS top_anomaly_type,
+        r.n                                          AS top_anomaly_count
+    FROM base b
+    LEFT JOIN ranked r
+      ON b.ordering_country = r.ordering_country
+     AND b.beneficiary_country = r.beneficiary_country
+     AND r.rn = 1
+    ORDER BY anomaly_rate_pct DESC, b.n_payments DESC,
+             b.ordering_country, b.beneficiary_country
+)
+TO 'data/aggregates/agg_anomaly_corridor.csv' (FORMAT CSV, HEADER);
+
+-- Sender Pareto curve: ordering accounts ranked by payment count and bucketed
+-- into percentiles. account_percentile = 1 is the busiest 1% of senders.
+COPY (
+    WITH acct AS (
+        SELECT ORDERING_ACCOUNT, count(*) AS n_payments
+        FROM payments
+        WHERE ORDERING_ACCOUNT IS NOT NULL
+          AND length(trim(ORDERING_ACCOUNT)) > 0
+        GROUP BY 1
+    ),
+    ranked AS (
+        SELECT
+            n_payments,
+            row_number() OVER (ORDER BY n_payments DESC, ORDERING_ACCOUNT) AS rnk,
+            count(*) OVER ()                      AS n_accounts,
+            sum(n_payments) OVER ()               AS total_payments
+        FROM acct
+    ),
+    bucketed AS (
+        SELECT
+            CAST(ceil(rnk * 100.0 / n_accounts) AS INTEGER) AS account_percentile,
+            n_payments,
+            total_payments
+        FROM ranked
+    )
+    SELECT
+        account_percentile,
+        count(*)                                  AS n_accounts,
+        CAST(sum(n_payments) AS BIGINT)           AS n_payments,
+        round(sum(n_payments) * 100.0 / max(total_payments), 4) AS share_of_payments_pct,
+        round(
+            sum(sum(n_payments)) OVER (
+                ORDER BY account_percentile
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            ) * 100.0 / max(total_payments),
+            4
+        )                                         AS cumulative_share_pct,
+        round(avg(n_payments), 2)                 AS avg_payments_per_account
+    FROM bucketed
+    GROUP BY 1
+    ORDER BY 1
+)
+TO 'data/aggregates/agg_sender_pareto.csv' (FORMAT CSV, HEADER);
+
 
 -- ----------------------------------------------------------------------------
 -- 7. Run summary (printed to stdout)

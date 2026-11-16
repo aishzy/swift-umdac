@@ -30,4 +30,6 @@ path_gap_formula_max_deviation_pp,0.0949,< 0.2,PASS
 endpoint_start_match_pct,95.016,94.5-95.5,PASS
 endpoint_end_match_pct,95.0074,94.5-95.5,PASS
 local_currency_share_pct,89.4479,89.0-90.0,PASS
+country_tz_coverage,228,228,PASS
+local_hour_rows_total,10000000,10000000,PASS
 sample_fraction_pct,4.9864,4.5-5.5,PASS

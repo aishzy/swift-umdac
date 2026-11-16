@@ -12,12 +12,17 @@
 SET threads = 8;
 SET preserve_insertion_order = false;
 SET temp_directory = 'data_local/duckdb_tmp';
+SET TimeZone = 'UTC';
 
 CREATE OR REPLACE VIEW payments AS
 SELECT * FROM read_parquet('data_local/swift_umdac_2026_clean_full.parquet');
 
 CREATE OR REPLACE VIEW sample_rows AS
 SELECT * FROM read_parquet('data_local/swift_umdac_2026_clean_sample_5pct.parquet');
+
+-- Country -> primary IANA timezone mapping, written by prepare_data.sql.
+CREATE OR REPLACE TABLE country_tz AS
+SELECT * FROM read_csv('data_local/country_tz.csv', header = true);
 
 -- ----------------------------------------------------------------------------
 -- 1. Hard integrity checks
@@ -285,6 +290,22 @@ SELECT
     '89.0-90.0',
     CASE WHEN count(*) FILTER (WHERE IS_LOCAL_CURRENCY) * 100.0 / count(*) BETWEEN 89.0 AND 90.0 THEN 'PASS' ELSE 'FAIL' END
 FROM payments;
+
+INSERT INTO qa_checks
+SELECT
+    'country_tz_coverage',
+    CAST(count(*) AS VARCHAR), '228',
+    CASE WHEN count(*) = 228 THEN 'PASS' ELSE 'FAIL' END
+FROM country_tz;
+
+INSERT INTO qa_checks
+SELECT
+    'local_hour_rows_total',
+    CAST(count(*) AS VARCHAR), '10000000',
+    CASE WHEN count(*) = 10000000 THEN 'PASS' ELSE 'FAIL' END
+FROM payments p
+JOIN country_tz tz
+  ON p.ORDERING_COUNTRY = tz.country;
 
 INSERT INTO qa_checks
 SELECT

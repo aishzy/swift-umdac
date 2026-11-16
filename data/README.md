@@ -85,20 +85,24 @@ Rows exclude the CSV header. All files are UTF-8 CSV with a header.
 | `agg_currency_country.csv` | 13,804 | ordering country × currency | `is_local_currency` (0/1), `n_payments`, `share_pct` |
 | `agg_currency_foreign_mix.csv` | 155 | foreign currency | `currency_code`, `n_payments`, `share_pct` |
 | `agg_routing.csv` | 32 | transaction type × participant count | `transaction_type`, `participant_count`, `n_payments`, `share_pct` |
+| `agg_routing_by_amount_decile.csv` | 30 | amount decile × transaction type | `amount_decile` (1–10), `decile_min_usd`, `decile_max_usd`, `share_pct` |
 | `agg_path_continuity.csv` | 19 | participant count | observed vs predicted gap rate, endpoint match rates |
 | `agg_fx_pooled.csv` | 90 | participant count × FX count | `fx_count`, `n_payments`, `share_pct` |
 | `agg_fx_country.csv` | 10,488 | country × local flag × participant count × FX count | `is_local_currency` (true/false), `share_pct` |
 | `agg_duration.csv` | 90 | participant count × FX count | `median_seconds`, `p90_seconds`, `p99_seconds`, `pct_over_1h` |
 | `agg_time_hour.csv` | 5,308 | ordering country × UTC hour | `hour_utc`, `n_payments`, `median_usd` |
+| `agg_time_hour_local.csv` | 24 | local hour (all payments) | `local_hour` (0–23), `n_payments`, `share_pct`, `median_usd`, `total_usd` |
 | `agg_time_daily.csv` | 93 | UTC date | `weekday`, `n_payments`, `median_usd`, `total_usd` |
 | `agg_local_currency.csv` | 228 | ordering country | `local_currency`, `n_local_currency`, `local_share_pct` |
 | `agg_anomaly_type.csv` | 6 | anomaly type | `share_of_all_pct`, `ordering_b_pct`, `beneficiary_c_pct`, `median_usd` |
 | `agg_anomaly_country.csv` | 229 | beneficiary country | `n_anomalies`, `anomaly_rate_pct`, `top_anomaly_type` |
+| `agg_anomaly_corridor.csv` | 26,764 | ordering country × beneficiary country | `n_payments`, `n_anomalies`, `anomaly_rate_pct`, `top_anomaly_type` |
 | `agg_anomaly_party_pair.csv` | 20 | anomaly type × party pair | `n_payments` |
 | `agg_bank_country.csv` | 229 | bank country | distinct ordering / beneficiary / path BICs, path mentions |
 | `agg_intermediary_concentration.csv` | 7,506 | intermediary BIC | `rank`, `mentions`, `share_pct`, `cumulative_share_pct` |
 | `agg_account_activity.csv` | 12 | ordering type × activity bucket | `n_accounts`, `n_payments`, payment/account share |
-| `qa_checks.csv` | 32 | one integrity check per row | `check_name`, `value`, `expected`, `status` |
+| `agg_sender_pareto.csv` | 100 | sender percentile (1 = busiest 1%) | `n_accounts`, `n_payments`, `share_of_payments_pct`, `cumulative_share_pct` |
+| `qa_checks.csv` | 34 | one integrity check per row | `check_name`, `value`, `expected`, `status` |
 | `qa_sample_vs_full.csv` | 27 | one metric per row | `full_value`, `sample_value`, `diff_sample_minus_full`, `ratio_sample_to_full` |
 
 ### Column conventions
@@ -112,6 +116,17 @@ Rows exclude the CSV header. All files are UTF-8 CSV with a header.
 - `ANOMALY_TYPE` is blank in the source for non-anomaly rows; anomaly aggregates
   only include non-blank rows.
 
+### Local-hour mapping
+
+`agg_time_hour_local.csv` places each payment on the ordering country's local
+clock. The country → timezone map is a hard-coded **ISO 3166-1 alpha-2 → IANA**
+table of 228 entries (the capital / main financial centre for multi-zone
+countries), embedded in `prepare_data.sql` as `country_tz` and also written to
+`data_local/country_tz.csv`. Timestamps are cast through UTC first
+(`(EVENT_TS_UTC AT TIME ZONE 'UTC') AT TIME ZONE <tz>`), so DST is handled by the
+DuckDB ICU extension. This is an approximation: a country with several zones
+contributes all of its payments to one local hour.
+
 ---
 
 ## 4. Reproducing the aggregates
@@ -124,8 +139,9 @@ duckdb -f scripts/verify_data.sql    # writes qa_checks.csv and qa_sample_vs_ful
 ```
 
 `prepare_data.sql` also writes row-level outputs to `data_local/` (gitignored):
-the full cleaned Parquet, the 5% sample (CSV.gz + Parquet), all anomaly rows and a
-100-row preview. Expect several minutes and ~3 GB of disk for a full rebuild.
+the full cleaned Parquet, the 5% sample (CSV.gz + Parquet), all anomaly rows, a
+100-row preview and the `country_tz.csv` reference map. Expect several minutes and
+~3 GB of disk for a full rebuild.
 
 See [`../scripts/README.md`](../scripts/README.md) for runtime notes and the local
 file manifest.
